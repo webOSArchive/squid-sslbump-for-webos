@@ -51,7 +51,7 @@ else
     # Remove binaries and service files but keep config, certs, and logs
     rm -f "$SQUID_DIR/sbin/squid"
     rm -f "$SQUID_DIR/libexec/security_file_certgen" "$SQUID_DIR/libexec/ssl_crtd"
-    rm -f "$SQUID_DIR/bin/squid-init.sh" "$SQUID_DIR/bin/setup-server.py"
+    rm -f "$SQUID_DIR/bin/squid-init.sh" "$SQUID_DIR/bin/setup-server.py" "$SQUID_DIR/bin/archive-server.py"
     echo "Removed binaries. Config, certs, and logs preserved at $SQUID_DIR."
 fi
 

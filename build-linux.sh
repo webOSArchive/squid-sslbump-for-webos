@@ -226,6 +226,7 @@ package_target() {
     cp "$SCRIPT_DIR/packaging/squid.conf.template" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/squid-init.sh" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/setup-server.py" "$stage_dir/"
+    cp "$SCRIPT_DIR/packaging/archive-server.py" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/squid-sslbump.service" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/install-linux.sh" "$stage_dir/install.sh"
     cp "$SCRIPT_DIR/packaging/uninstall-linux.sh" "$stage_dir/uninstall.sh"

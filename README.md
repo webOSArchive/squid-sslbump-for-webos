@@ -12,6 +12,8 @@ An SSL-bumping proxy that gives retro webOS devices (Palm Pre, HP TouchPad, etc.
 
 Download the latest `squid-sslbump-for-webos-macos-universal.pkg` from the [Releases](../../releases) page and double-click to install. The proxy starts automatically and runs as a background service.
 
+Supported platforms are Mojave and up, on both Intel and Apple Silicon.
+
 ### Linux (x86-64, Raspberry Pi)
 
 Download the tarball for your platform from the [Releases](../../releases) page, then:
@@ -35,7 +37,15 @@ Use the `linux-amd64` tarball inside WSL2. WSL2 on Windows 11 supports systemd, 
 
 ## Setup: configure your device
 
-Once installed, open a browser on any computer on your network and go to:
+Once installed, open the setup page in a browser:
+
+On the computer you installed on:
+
+```
+http://localhost:3129/
+```
+
+Or on any other computer on your network, go to:
 
 ```
 http://<proxy-ip>:3129/

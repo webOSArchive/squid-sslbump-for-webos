@@ -54,8 +54,21 @@ http_access deny CONNECT !SSL_ports
 http_access allow all
 
 # ---------------------------------------------------------------
+# Local archive server — restored retro websites
+# Requests to archived domains are routed to the archive server
+# on port 3130 instead of the internet.
+# ---------------------------------------------------------------
+acl archived_domains dstdomain help.palm.com downloads.help.palm.com
+
+cache_peer 127.0.0.1 parent 3130 0 no-query originserver name=archive
+cache_peer_access archive allow archived_domains
+cache_peer_access archive deny all
+never_direct allow archived_domains
+
+# ---------------------------------------------------------------
 # Routing and caching
 # ---------------------------------------------------------------
+always_direct deny archived_domains
 always_direct allow all
 cache deny all
 

@@ -44,10 +44,15 @@ fi
 # Ensure ownership is correct
 chown -R squid:squid "$SQUID_DIR/ssl" "$SQUID_DIR/var" 2>/dev/null || true
 
-# Start setup server (serves cert download + instructions on port 3129)
+# Start setup server (cert download + instructions + add-on manager on port 3129)
 python3 "$SQUID_DIR/bin/setup-server.py" &
 SETUP_PID=$!
-trap "kill $SETUP_PID 2>/dev/null" EXIT
+
+# Start archive server (restored retro websites on port 3130)
+python3 "$SQUID_DIR/bin/archive-server.py" &
+ARCHIVE_PID=$!
+
+trap "kill $SETUP_PID $ARCHIVE_PID 2>/dev/null" EXIT
 
 # Run Squid (not exec, so the EXIT trap fires when Squid stops)
 "$SQUID_DIR/sbin/squid" -N -f "$SQUID_DIR/etc/squid.conf"

@@ -251,12 +251,15 @@ build_pkg() {
 
     # Add our custom scripts and config (overlay on top of DESTDIR)
     mkdir -p "$squid_root/bin" "$squid_root/ssl" \
-             "$squid_root/var/lib" "$squid_root/var/cache" "$squid_root/var/logs"
+             "$squid_root/var/lib" "$squid_root/var/cache" "$squid_root/var/logs" \
+             "$squid_root/var/archive"
     cp "$SCRIPT_DIR/packaging/squid-init.sh" "$squid_root/bin/"
     cp "$SCRIPT_DIR/packaging/setup-server.py" "$squid_root/bin/"
+    cp "$SCRIPT_DIR/packaging/archive-server.py" "$squid_root/bin/"
     cp "$SCRIPT_DIR/packaging/macos/uninstall.sh" "$squid_root/bin/uninstall.sh"
     chmod +x "$squid_root/bin/squid-init.sh" \
              "$squid_root/bin/setup-server.py" \
+             "$squid_root/bin/archive-server.py" \
              "$squid_root/bin/uninstall.sh"
 
     # Replace the default squid.conf with our template

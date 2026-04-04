@@ -29,10 +29,11 @@ fi
 echo "Installing files to $SQUID_DIR..."
 cp -r "$SCRIPT_DIR/squid/." "$SQUID_DIR/"
 
-# Install startup wrapper and setup server
+# Install startup wrapper, setup server, and archive server
 cp "$SCRIPT_DIR/squid-init.sh" "$SQUID_DIR/bin/squid-init.sh"
 cp "$SCRIPT_DIR/setup-server.py" "$SQUID_DIR/bin/setup-server.py"
-chmod +x "$SQUID_DIR/bin/squid-init.sh" "$SQUID_DIR/bin/setup-server.py"
+cp "$SCRIPT_DIR/archive-server.py" "$SQUID_DIR/bin/archive-server.py"
+chmod +x "$SQUID_DIR/bin/squid-init.sh" "$SQUID_DIR/bin/setup-server.py" "$SQUID_DIR/bin/archive-server.py"
 
 # Install config (don't overwrite an existing one)
 if [ ! -f "$SQUID_DIR/etc/squid.conf" ]; then
@@ -45,7 +46,7 @@ else
 fi
 
 # Create mutable directories and set ownership
-mkdir -p "$SQUID_DIR/ssl" "$SQUID_DIR/var/lib" "$SQUID_DIR/var/cache" "$SQUID_DIR/var/logs"
+mkdir -p "$SQUID_DIR/ssl" "$SQUID_DIR/var/lib" "$SQUID_DIR/var/cache" "$SQUID_DIR/var/logs" "$SQUID_DIR/var/archive"
 chown -R root:root "$SQUID_DIR"
 chown -R "$SQUID_USER:$SQUID_USER" "$SQUID_DIR/var" "$SQUID_DIR/ssl"
 

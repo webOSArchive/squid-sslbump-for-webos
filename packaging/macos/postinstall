@@ -27,7 +27,7 @@ if ! id "$SQUID_USER" &>/dev/null; then
 fi
 
 # Set ownership of mutable directories
-mkdir -p "$SQUID_DIR/var/logs" "$SQUID_DIR/var/lib" "$SQUID_DIR/var/cache" "$SQUID_DIR/ssl"
+mkdir -p "$SQUID_DIR/var/logs" "$SQUID_DIR/var/lib" "$SQUID_DIR/var/cache" "$SQUID_DIR/var/archive" "$SQUID_DIR/ssl"
 chown -R squid:squid "$SQUID_DIR/var" "$SQUID_DIR/ssl"
 
 # Install launchd plist
@@ -42,3 +42,45 @@ echo ""
 echo "squid-sslbump-for-webos installed and started."
 echo "Proxy running on port 3128."
 echo "Setup page (cert download + instructions): http://$(ipconfig getifaddr en0 2>/dev/null || echo 'your-ip'):3129/"
+
+# Desktop shortcut + auto-open — best-effort, must not abort the postinstall.
+# Disable exit-on-error for this entire section.
+set +e
+# Find the logged-in GUI user. /dev/console is root when accessed via Screen
+# Sharing, and loginwindow may not be running, so try multiple methods.
+CONSOLE_USER=$(stat -f "%Su" /dev/console 2>/dev/null)
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = "root" ]; then
+    CONSOLE_USER=$(ps -axo user,comm 2>/dev/null | awk '($2=="loginwindow"||$2=="Dock") && $1!="root" {print $1; exit}')
+fi
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = "root" ]; then
+    CONSOLE_USER=$(defaults read /Library/Preferences/com.apple.loginwindow lastUserName 2>/dev/null || true)
+fi
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = "root" ]; then
+    CONSOLE_USER=$(ls /Users/ | grep -vE '^(Shared|Guest|root)$' | head -1)
+fi
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+    DESKTOP="/Users/$CONSOLE_USER/Desktop"
+    SHORTCUT="$DESKTOP/squid-sslbump setup.webloc"
+    if [ -d "$DESKTOP" ]; then
+        # Write to /tmp as root (no TCC restriction), copy to Desktop as the user.
+        TMP_WEBLOC=$(mktemp /tmp/squid-setup-XXXXXX.webloc)
+        if [ -n "$TMP_WEBLOC" ]; then
+            cat > "$TMP_WEBLOC" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>URL</key>
+    <string>http://localhost:3129/</string>
+</dict>
+</plist>
+EOF
+            chmod 644 "$TMP_WEBLOC"
+            sudo -u "$CONSOLE_USER" cp "$TMP_WEBLOC" "$SHORTCUT"
+            rm -f "$TMP_WEBLOC"
+        fi
+    fi
+    # Also try to open the page automatically; may not work on all macOS versions.
+    sleep 5
+    sudo -u "$CONSOLE_USER" osascript -e 'open location "http://localhost:3129/"'
+fi
