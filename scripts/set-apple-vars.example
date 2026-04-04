@@ -1,0 +1,11 @@
+# to enable notarization on macOS:
+# copy this file to set-apple-vars.sh and fill in your values
+
+export APPLE_ID="you@example.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="XXXXXXXXXX"
+
+# To find your signing identities:
+#   security find-identity -v -p basic | grep "Developer ID"
+export SIGNING_IDENTITY="Developer ID Installer: Your Name (TEAMID)"
+export CODE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"

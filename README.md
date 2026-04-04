@@ -1,59 +1,137 @@
-squid-sslbump (dockerless)
-==========================
-squid ssl proxy with icap without Docker on Debian-based environments. Based on justinschw/docker-squid-sslbump-rpi, which was based on syakesaba/docker-sslbump-proxy. The Docker install didn't work on my Pi Zero, so here it is on the "bare metal."
+# squid-sslbump-for-webos
 
-Base Environment
-======================
-- ✅ Tested on: raspbian/stretch on Pi Zero and Zero W (it works, but it takes a *long* time to build!)
-- ✅ Tested on: Ubuntu 18.04 on x64
-- ❗Could not build on: Ubuntu 20.04
-  - Requires `crypto` which can be had with `apt install libssl-dev`
-  - Requires `libssl1.0-dev` which is no longer available. To fix:
-      - add [this PPA](https://github.com/rvm/ubuntu_rvm): `sudo apt-add-repository -y ppa:rael-gc/rvm` 
-      - `sudo apt install libssl1.0-dev`
-  - Still got errors. Gave up and built on 18.04 and copied output folder to new machine 🤷‍♂️
-- Instructions below require git (or you can download the files directly)
-  - ```sudo apt-get update```
-  - ```sudo apt-get install git```
+An SSL-bumping proxy that gives retro webOS devices (Palm Pre, HP TouchPad, LG webOS Smart TVs, etc.) access to modern HTTPS websites. The proxy intercepts HTTPS connections and re-signs them with its own certificate, bridging the gap between devices with outdated SSL stacks and the modern web.
 
-Installation on Bare Metal
-==========================
-```sh
-git clone https://github.com/codepoet80/squid-sslbump-rpi.git
-cd squid-sslbump-rpi
-chmod +x ./install.sh
+> **Note:** This proxy is intentionally permissive — it accepts weak ciphers, skips upstream certificate verification, and allows all clients. It is designed for use on a private home network, not exposed to the internet. Restrict access with your router's firewall.
+
+---
+
+## Installation
+
+### macOS
+
+Download the latest `squid-sslbump-for-webos-macos-universal.pkg` from the [Releases](../../releases) page and double-click to install. The proxy starts automatically and runs as a background service.
+
+### Linux (x86-64, Raspberry Pi)
+
+Download the tarball for your platform from the [Releases](../../releases) page, then:
+
+```bash
+tar xzf squid-sslbump-for-webos-linux-<arch>.tar.gz
+cd squid-sslbump-for-webos-linux-<arch>
 sudo ./install.sh
 ```
-- If you want, you can delete the ```squid-sslbump-rpi``` directory after install completes.
-- Now run: `sudo /usr/local/squid/startsquid.sh`
 
-Installation via Docker
-=======================
-Community member Nomad84 has documented his approach to [Dockerizing this service here](https://github.com/h8pewou/legacy_webos).
+Supported platforms:
+- `linux-amd64` — x86-64 desktop/server
+- `linux-arm64` — Raspberry Pi 4 and newer
+- `linux-armv7` — Raspberry Pi Zero, 2, and 3
 
-Using the Proxy
-======================
-- Set your client's proxy server to the IP address of your Pi , and use port 3128 (for both HTTP and HTTPS)
-- Export your fake root-cert from your Pi after installation and import it into your client web browsers.  
-- (Root-cert path on the Pi after installation: ```/usr/local/squid/ssl/localCert.der```)
-- OR, just access some HTTPS webpages from the client via the proxy and choose to "Trust Cert". 
+### Windows (WSL2)
 
-Managing the Proxy
-======================
-- installed in: `/usr/local/squid`
-- to see if its running, list processes: `ps -ef`
-- to kill: `killall squid`
-- to run in background: `/usr/local/squid/startsquid.sh &` 
-  + the & makes it go background after its startup messages
+Use the `linux-amd64` tarball inside WSL2. WSL2 on Windows 11 supports systemd, so the service installs and runs the same way as Linux.
 
-Notes
-======================
-- This deliberately uses a root-cert with weak encryption to support old devices
-- Make sure your is proxy safe.  
-- To prevent unwanted use, firewalls or some squid-acls should be applied.  
+---
 
-License
-======================
-MIT License  
-See: LICENSE
+## Setup: configure your device
 
+Once installed, open a browser on any computer on your network and go to:
+
+```
+http://<proxy-ip>:3129/
+```
+
+This page shows your proxy address and port, lets you download the CA certificate, and has step-by-step setup instructions for common webOS devices.
+
+### Proxy settings to enter on your retro device
+
+| Setting | Value |
+|---------|-------|
+| Proxy host | your computer's IP address |
+| Proxy port | `3128` |
+
+### CA certificate
+
+Your device needs to trust the proxy's certificate to avoid SSL errors. Download and install it from the setup page, or fetch it directly:
+
+```
+http://<proxy-ip>:3129/cert
+```
+
+The certificate is also available on disk at `/usr/local/squid/ssl/localCert.der` after the first service start.
+
+---
+
+## Verifying it works
+
+**1. Check the service is running**
+
+macOS:
+```bash
+sudo launchctl list | grep squid
+```
+A PID (not `-`) next to `com.squid-sslbump-for-webos` means it's running.
+
+Linux:
+```bash
+sudo systemctl status squid-sslbump
+```
+
+**2. Check the proxy port is listening**
+```bash
+netstat -an | grep 3128
+```
+Should show `LISTEN` on port 3128.
+
+**3. Send a test request through the proxy**
+```bash
+curl -x http://localhost:3128 https://example.com -o /dev/null -w "%{http_code}\n"
+```
+Should print `200`.
+
+**4. Check the setup page is up**
+
+Open `http://localhost:3129/` in a browser. You should see the setup page with a working cert download link.
+
+**5. Check logs if something looks wrong**
+
+macOS:
+```bash
+tail -f /usr/local/squid/var/logs/squid-service.log
+```
+
+Linux:
+```bash
+sudo journalctl -u squid-sslbump -f
+```
+
+---
+
+## Uninstalling
+
+### macOS
+```bash
+sudo /usr/local/squid/bin/uninstall.sh
+```
+
+### Linux
+```bash
+sudo ./uninstall.sh
+```
+(The `uninstall.sh` is included in the same tarball as `install.sh`.)
+
+Both uninstallers will ask whether to remove your configuration and certificates (default: keep them), and whether to remove the `squid` system user.
+
+---
+
+## Notes
+
+- Weak encryption and disabled certificate verification are intentional — required for retro devices with outdated SSL stacks.
+- Keep this proxy on your private network. Use your router's firewall to limit which devices can reach port 3128.
+- Installed to `/usr/local/squid`. Config file at `/usr/local/squid/etc/squid.conf`.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)

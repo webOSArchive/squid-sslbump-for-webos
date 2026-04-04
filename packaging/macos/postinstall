@@ -1,0 +1,44 @@
+#!/bin/bash
+# postinstall — runs after pkg payload is laid down
+set -e
+
+SQUID_DIR=/usr/local/squid
+SQUID_USER=squid
+PLIST_SRC="$SQUID_DIR/etc/com.squid-sslbump-for-webos.plist"
+PLIST_DEST="/Library/LaunchDaemons/com.squid-sslbump-for-webos.plist"
+
+# Create squid system user if not present
+if ! id "$SQUID_USER" &>/dev/null; then
+    # Find an unused UID in the system range
+    SQUID_UID=300
+    while dscl . -read /Users/squid_uid_check_$SQUID_UID &>/dev/null 2>&1 || \
+          dscacheutil -q user | grep -q "uid: $SQUID_UID"; do
+        SQUID_UID=$((SQUID_UID + 1))
+    done
+
+    dscl . -create /Groups/squid
+    dscl . -create /Groups/squid PrimaryGroupID $SQUID_UID
+    dscl . -create /Users/squid
+    dscl . -create /Users/squid UniqueID $SQUID_UID
+    dscl . -create /Users/squid PrimaryGroupID $SQUID_UID
+    dscl . -create /Users/squid UserShell /usr/bin/false
+    dscl . -create /Users/squid RealName "Squid Proxy"
+    dscl . -create /Users/squid NFSHomeDirectory /var/empty
+fi
+
+# Set ownership of mutable directories
+mkdir -p "$SQUID_DIR/var/logs" "$SQUID_DIR/var/lib" "$SQUID_DIR/var/cache" "$SQUID_DIR/ssl"
+chown -R squid:squid "$SQUID_DIR/var" "$SQUID_DIR/ssl"
+
+# Install launchd plist
+cp "$PLIST_SRC" "$PLIST_DEST"
+chown root:wheel "$PLIST_DEST"
+chmod 644 "$PLIST_DEST"
+
+# Load the service
+launchctl load -w "$PLIST_DEST"
+
+echo ""
+echo "squid-sslbump-for-webos installed and started."
+echo "Proxy running on port 3128."
+echo "Setup page (cert download + instructions): http://$(ipconfig getifaddr en0 2>/dev/null || echo 'your-ip'):3129/"

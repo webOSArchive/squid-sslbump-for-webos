@@ -1,0 +1,15 @@
+[Unit]
+Description=squid-sslbump-for-webos — SSL proxy for retro devices
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/squid/bin/squid-init.sh
+ExecStop=/usr/local/squid/sbin/squid -k shutdown
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

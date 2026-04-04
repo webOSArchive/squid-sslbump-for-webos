@@ -1,0 +1,71 @@
+# squid-sslbump-for-webos — Squid 6.x configuration
+# Intentionally permissive: designed to proxy HTTPS for retro devices
+# with outdated SSL stacks (webOS, legacy smart TVs, etc.)
+
+# ---------------------------------------------------------------
+# Listening port — SSL bump mode
+# ---------------------------------------------------------------
+http_port 3128 ssl-bump \
+    cert=/usr/local/squid/ssl/localCert.crt \
+    key=/usr/local/squid/ssl/localCert.pem \
+    generate-host-certificates=on \
+    dynamic_cert_mem_cache_size=4MB
+
+# ---------------------------------------------------------------
+# Certificate generation (signs certificates for bumped connections)
+# ---------------------------------------------------------------
+sslcrtd_program /usr/local/squid/libexec/security_file_certgen \
+    -s /usr/local/squid/var/lib/ssl_db \
+    -M 4MB
+sslcrtd_children 8 startup=1 idle=1
+
+# ---------------------------------------------------------------
+# SSL bump policy — intercept all HTTPS connections
+# ---------------------------------------------------------------
+acl step1 at_step SslBump1
+ssl_bump peek step1
+ssl_bump bump all
+
+# ---------------------------------------------------------------
+# Retro device compatibility
+# Upstream connections: accept all cert errors, skip peer verification
+# ---------------------------------------------------------------
+sslproxy_cert_error allow all
+tls_outgoing_options flags=DONT_VERIFY_PEER
+
+# ---------------------------------------------------------------
+# Access control — allow all (restrict via firewall on your network)
+# ---------------------------------------------------------------
+acl SSL_ports port 443
+acl Safe_ports port 80
+acl Safe_ports port 443
+acl Safe_ports port 21
+acl Safe_ports port 70
+acl Safe_ports port 210
+acl Safe_ports port 1025-65535
+acl Safe_ports port 280
+acl Safe_ports port 488
+acl Safe_ports port 591
+acl Safe_ports port 777
+acl CONNECT method CONNECT
+
+http_access deny !Safe_ports
+http_access deny CONNECT !SSL_ports
+http_access allow all
+
+# ---------------------------------------------------------------
+# Routing and caching
+# ---------------------------------------------------------------
+always_direct allow all
+cache deny all
+
+# ---------------------------------------------------------------
+# Process identity
+# ---------------------------------------------------------------
+cache_effective_user squid
+cache_effective_group squid
+
+# ---------------------------------------------------------------
+# ICAP (reserved for future use)
+# ---------------------------------------------------------------
+icap_service_failure_limit -1
