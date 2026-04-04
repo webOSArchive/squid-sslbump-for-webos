@@ -35,15 +35,14 @@ cp "$SCRIPT_DIR/setup-server.py" "$SQUID_DIR/bin/setup-server.py"
 cp "$SCRIPT_DIR/archive-server.py" "$SQUID_DIR/bin/archive-server.py"
 chmod +x "$SQUID_DIR/bin/squid-init.sh" "$SQUID_DIR/bin/setup-server.py" "$SQUID_DIR/bin/archive-server.py"
 
-# Install config (don't overwrite an existing one)
-if [ ! -f "$SQUID_DIR/etc/squid.conf" ]; then
-    echo "Installing default config..."
-    cp "$SCRIPT_DIR/squid.conf.template" "$SQUID_DIR/etc/squid.conf"
-else
-    echo "Existing config found at $SQUID_DIR/etc/squid.conf — leaving it in place."
-    echo "New default config saved as $SQUID_DIR/etc/squid.conf.new for reference."
-    cp "$SCRIPT_DIR/squid.conf.template" "$SQUID_DIR/etc/squid.conf.new"
+# Install config — always deploy the current template.
+# Back up any existing config so user customizations aren't silently lost.
+if [ -f "$SQUID_DIR/etc/squid.conf" ]; then
+    echo "Backing up existing config to $SQUID_DIR/etc/squid.conf.bak"
+    cp "$SQUID_DIR/etc/squid.conf" "$SQUID_DIR/etc/squid.conf.bak"
 fi
+echo "Installing config..."
+cp "$SCRIPT_DIR/squid.conf.template" "$SQUID_DIR/etc/squid.conf"
 
 # Create mutable directories and set ownership
 mkdir -p "$SQUID_DIR/ssl" "$SQUID_DIR/var/lib" "$SQUID_DIR/var/cache" "$SQUID_DIR/var/logs" "$SQUID_DIR/var/archive"

@@ -31,6 +31,10 @@ SQUID_TAG="SQUID_$(echo "$SQUID_VERSION" | tr '.' '_')"
 SQUID_URL="https://github.com/squid-cache/squid/releases/download/${SQUID_TAG}/squid-${SQUID_VERSION}.tar.gz"
 OPENSSL_URL="https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
 
+# Build inside this Docker image to pin glibc to 2.31 (Ubuntu 20.04 = Debian Bullseye).
+# This ensures binaries run on Raspberry Pi OS Bullseye and all newer Pi OS versions.
+DOCKER_IMAGE="ubuntu:20.04"
+
 INSTALL_PREFIX="/usr/local/squid"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
@@ -61,13 +65,43 @@ declare -A CROSS_PREFIX=(
 
 log() { echo "" && echo "==> $*"; }
 
+# Re-exec inside Docker for a pinned glibc build environment.
+# Skip by setting SQUID_BUILD_IN_DOCKER=1 (set automatically when inside the container).
+maybe_use_docker() {
+    if [ "${SQUID_BUILD_IN_DOCKER:-}" = "1" ]; then
+        return  # Already inside the container
+    fi
+    if ! command -v docker &>/dev/null; then
+        echo "WARNING: Docker not found. Building on the host — binaries may require"
+        echo "         a newer glibc than your target system provides."
+        echo "         Install Docker for fully compatible builds targeting Raspberry Pi OS."
+        echo ""
+        return
+    fi
+    log "Re-launching build inside Docker ($DOCKER_IMAGE) for glibc 2.31 compatibility..."
+    docker run --rm \
+        --volume "$SCRIPT_DIR:/work" \
+        --workdir /work \
+        --env SQUID_BUILD_IN_DOCKER=1 \
+        --env DEBIAN_FRONTEND=noninteractive \
+        "$DOCKER_IMAGE" \
+        bash build-linux.sh
+    exit $?
+}
+
 install_deps() {
     local pkgs=(
         build-essential wget curl perl
         gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
         gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
-        qemu-user-static binfmt-support
+        qemu-user-static
     )
+    # binfmt-support registers QEMU handlers in the kernel — only needed on the
+    # host. Inside Docker, the host's binfmt entries are already active (the
+    # kernel is shared), so there's nothing to register.
+    if [ "${SQUID_BUILD_IN_DOCKER:-}" != "1" ]; then
+        pkgs+=(binfmt-support)
+    fi
     local missing=()
     for pkg in "${pkgs[@]}"; do
         dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
@@ -77,8 +111,13 @@ install_deps() {
         return
     fi
     log "Installing build dependencies: ${missing[*]}"
-    sudo apt-get update -q
-    sudo apt-get install -y -q "${missing[@]}"
+    if [ "$(id -u)" = "0" ]; then
+        apt-get update -q
+        apt-get install -y -q "${missing[@]}"
+    else
+        sudo apt-get update -q
+        sudo apt-get install -y -q "${missing[@]}"
+    fi
 }
 
 download_sources() {
@@ -119,15 +158,21 @@ build_openssl() {
 
     pushd "$build_dir" > /dev/null
     local cross="${CROSS_PREFIX[$target]}"
+    # no-dso: disables dynamic ENGINE loading (dlopen/libdl dependency).
+    # no-engine: disables ENGINE plugin support entirely.
+    # Neither is needed for SSL bumping — engines are for hardware crypto
+    # accelerators. Omitting them eliminates the circular libcrypto→libdl
+    # dependency that breaks static linking on older toolchains (Ubuntu 20.04).
+    local openssl_opts=(no-shared no-tests no-dso no-engine)
     if [ -n "$cross" ]; then
         ./Configure "${OPENSSL_TARGET[$target]}" \
             --prefix="$install_dir" \
             --cross-compile-prefix="$cross" \
-            no-shared no-tests
+            "${openssl_opts[@]}"
     else
         ./config \
             --prefix="$install_dir" \
-            no-shared no-tests
+            "${openssl_opts[@]}"
     fi
     make -j"$(nproc)" 2>&1
     make install_sw 2>&1
@@ -173,7 +218,13 @@ build_squid() {
 
     export PKG_CONFIG_PATH="$openssl_dir/lib/pkgconfig"
     export CPPFLAGS="-I$openssl_dir/include"
-    export LDFLAGS="-L$openssl_dir/lib"
+    # Static libcrypto.a (no-dso no-engine build) references pthread symbols.
+    # Some Squid sub-targets build their own link commands and don't include
+    # $(LIBS), so LIBS= doesn't reach them. LDFLAGS does reach every link.
+    # --no-as-needed forces libpthread.so into every binary unconditionally so
+    # its symbols are available when libcrypto.a is processed later.
+    # --as-needed restores the default for subsequent libraries.
+    export LDFLAGS="-L$openssl_dir/lib -Wl,--no-as-needed -lpthread -Wl,--as-needed"
 
     if [ -n "$host" ]; then
         configure_args+=("--host=$host")
@@ -201,10 +252,17 @@ ac_cv_func_setresuid=yes
 ac_cv_func_setresgid=yes
 squid_cv_gnu_atomics=yes
 ac_cv_c_bigendian=no
+ac_cv_lib_crypto_SSL_get0_param=yes
 EOF
         ./configure "${configure_args[@]}" --cache-file=cross-cache.conf
     else
-        ./configure "${configure_args[@]}"
+        # SSL_get0_param lives in libssl, but Squid's configure checks libcrypto.
+        # Pre-seed the cache so HAVE_LIBSSL_SSL_GET0_PARAM is defined; otherwise
+        # the compat fallback accesses the opaque ssl_st struct (fails on 1.1.1).
+        cat > native-cache.conf <<EOF
+ac_cv_lib_crypto_SSL_get0_param=yes
+EOF
+        ./configure "${configure_args[@]}" --cache-file=native-cache.conf
     fi
 
     make -j"$(nproc)" 2>&1
@@ -263,6 +321,7 @@ main() {
     echo "Targets: ${TARGETS[*]}"
     echo ""
 
+    maybe_use_docker
     install_deps
     mkdir -p "$BUILD_DIR"
     download_sources

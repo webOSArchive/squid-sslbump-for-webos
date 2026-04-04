@@ -26,8 +26,10 @@ sudo ./install.sh
 
 Supported platforms:
 - `linux-amd64` — x86-64 desktop/server
-- `linux-arm64` — Raspberry Pi 4 and newer
-- `linux-armv7` — Raspberry Pi Zero, 2, and 3
+- `linux-arm64` — Raspberry Pi 4 and 5 (64-bit OS)
+- `linux-armv7` — Raspberry Pi Zero, 2, and 3 (32-bit OS only)
+
+> **Raspberry Pi 4/5:** Use `linux-arm64`. The `armv7` build will not run on a 64-bit OS — you'll get a startup error about a missing file even though the binary is present.
 
 ### Windows (WSL2)
 
@@ -199,7 +201,21 @@ Then restart WSL (`wsl --shutdown` in PowerShell, then reopen).
 
 Run `build-linux.sh` on an x86-64 Linux machine to produce tarballs for all three platforms.
 
-### Build dependencies
+### Recommended: build with Docker
+
+If Docker is installed, the script automatically re-execs itself inside an `ubuntu:20.04` container. This pins glibc to 2.31, which matches Raspberry Pi OS Bullseye — ensuring the binaries run on all Pi OS versions from Bullseye onward.
+
+```bash
+bash build-linux.sh
+```
+
+Docker must be runnable by the current user (i.e. the user is in the `docker` group, or you prefix with `sudo`).
+
+### Without Docker
+
+If Docker is not available, the script builds on the host. The resulting binaries require the host's glibc version, which may be too new for older target systems. A warning is printed when this happens.
+
+Host build dependencies (installed automatically if missing):
 
 ```bash
 sudo apt-get install -y \
@@ -209,15 +225,11 @@ sudo apt-get install -y \
     qemu-user-static binfmt-support
 ```
 
-`qemu-user-static` and `binfmt-support` are required to run the arm64/armv7 cross-compiled build tools (`cf_gen` etc.) on the x86-64 host during compilation. The build script checks for missing packages and prompts to install them automatically.
+`qemu-user-static` and `binfmt-support` are required to run the arm64/armv7 cross-compiled build tools on the x86-64 host during compilation (via QEMU binfmt_misc).
 
-### Running the build
+### Output
 
-```bash
-bash build-linux.sh
-```
-
-Output tarballs are written to `./dist/`. Each contains the Squid binary, helpers, config template, startup wrapper, systemd unit, and install/uninstall scripts.
+Tarballs are written to `./dist/`. Each contains the Squid binary, helpers, config template, startup wrapper, systemd unit, and install/uninstall scripts.
 
 Building takes roughly 20–40 minutes on typical hardware (arm64/armv7 are slower due to cross-compilation and QEMU emulation of build tools).
 
