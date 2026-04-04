@@ -19,13 +19,16 @@ set -e
 # Versions — update these when upgrading
 # Verify checksums at:
 #   https://www.openssl.org/source/  (OpenSSL)
-#   http://www.squid-cache.org/Versions/v6/  (Squid)
+#   https://github.com/squid-cache/squid/releases  (Squid)
 # ---------------------------------------------------------------
-SQUID_VERSION="6.12"
+SQUID_VERSION="6.14"
+SQUID_SHA256="fe061926dff1563eeed963f6f15a73b120afa31e45d151a0a8a7b04bf0781d33"
 OPENSSL_VERSION="1.1.1w"
 OPENSSL_SHA256="cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8"
 
-SQUID_URL="http://www.squid-cache.org/Versions/v6/squid-${SQUID_VERSION}.tar.gz"
+# squid-cache.org no longer hosts tarballs; releases are on GitHub
+SQUID_TAG="SQUID_$(echo "$SQUID_VERSION" | tr '.' '_')"
+SQUID_URL="https://github.com/squid-cache/squid/releases/download/${SQUID_TAG}/squid-${SQUID_VERSION}.tar.gz"
 OPENSSL_URL="https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
 
 INSTALL_PREFIX="/usr/local/squid"
@@ -59,12 +62,23 @@ declare -A CROSS_PREFIX=(
 log() { echo "" && echo "==> $*"; }
 
 install_deps() {
-    log "Installing build dependencies..."
-    sudo apt-get update -q
-    sudo apt-get install -y -q \
-        build-essential wget curl perl \
-        gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+    local pkgs=(
+        build-essential wget curl perl
+        gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
         gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+        qemu-user-static binfmt-support
+    )
+    local missing=()
+    for pkg in "${pkgs[@]}"; do
+        dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
+    done
+    if [ ${#missing[@]} -eq 0 ]; then
+        echo "All build dependencies already installed."
+        return
+    fi
+    log "Installing build dependencies: ${missing[*]}"
+    sudo apt-get update -q
+    sudo apt-get install -y -q "${missing[@]}"
 }
 
 download_sources() {
@@ -81,23 +95,11 @@ download_sources() {
 
     log "Downloading Squid $SQUID_VERSION..."
     local squid_archive="$src_dir/squid-${SQUID_VERSION}.tar.gz"
-    local squid_sha256_file="$src_dir/squid-${SQUID_VERSION}.tar.gz.sha256"
     if [ ! -f "$squid_archive" ]; then
         wget -q -O "$squid_archive" "$SQUID_URL"
     fi
-    if [ ! -f "$squid_sha256_file" ]; then
-        wget -q -O "$squid_sha256_file" "${SQUID_URL}.sha256" || true
-    fi
-    if [ -s "$squid_sha256_file" ]; then
-        # The Squid project sha256 file contains "hash  filename" — rewrite path to match local file
-        local expected
-        expected=$(awk '{print $1}' "$squid_sha256_file")
-        echo "$expected  $squid_archive" | sha256sum -c
-        echo "Squid checksum OK."
-    else
-        echo "WARNING: Could not fetch Squid SHA256 checksum. Skipping verification."
-        echo "Verify manually: $SQUID_URL.sha256"
-    fi
+    echo "$SQUID_SHA256  $squid_archive" | sha256sum -c
+    echo "Squid checksum OK."
 }
 
 build_openssl() {
@@ -175,17 +177,26 @@ build_squid() {
 
     if [ -n "$host" ]; then
         configure_args+=("--host=$host")
+        # Prevent Squid's configure from running getconf on the build host to
+        # determine large-file CFLAGS — on x86_64 that adds -m64, which the
+        # cross-compiler rejects.
+        configure_args+=("--with-build-environment=default")
         export CC="${cross}gcc"
         export CXX="${cross}g++"
         export AR="${cross}ar"
         export RANLIB="${cross}ranlib"
         export STRIP="${cross}strip"
+        # Prevent autoconf from injecting host-arch flags (e.g. -m64) which
+        # the cross-compiler does not accept.
+        export CFLAGS="-g -O2"
+        export CXXFLAGS="-g -O2"
         # Provide cache values for configure tests that require execution
         # (can't run cross-compiled binaries on the build host)
         cat > cross-cache.conf <<EOF
 ac_cv_func_setresuid=yes
 ac_cv_func_setresgid=yes
 squid_cv_gnu_atomics=yes
+ac_cv_c_bigendian=no
 EOF
         ./configure "${configure_args[@]}" --cache-file=cross-cache.conf
     else
@@ -204,7 +215,7 @@ EOF
     popd > /dev/null
     rm -rf "$build_dir"
 
-    unset CC CXX AR RANLIB STRIP PKG_CONFIG_PATH CPPFLAGS LDFLAGS
+    unset CC CXX AR RANLIB STRIP PKG_CONFIG_PATH CPPFLAGS LDFLAGS CFLAGS CXXFLAGS
 }
 
 package_target() {
