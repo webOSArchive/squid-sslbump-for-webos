@@ -134,6 +134,95 @@ Both uninstallers will ask whether to remove your configuration and certificates
 
 ---
 
+## Troubleshooting
+
+### Device still shows SSL errors after installing the certificate
+
+The certificate must be installed as a **trusted CA**, not just a regular certificate. On webOS devices, use the setup page (`http://<proxy-ip>:3129/`) and follow the device-specific instructions — the steps differ between Palm Pre/Pixi and HP TouchPad.
+
+If the setup page shows the cert download but the device won't accept it, try fetching the `.der` file directly:
+```
+http://<proxy-ip>:3129/cert
+```
+
+### Device can connect to the proxy but websites fail
+
+Check that the device has the CA certificate installed and trusted. Then test the proxy itself from your computer:
+```bash
+curl -x http://localhost:3128 https://example.com -o /dev/null -w "%{http_code}\n"
+```
+If this doesn't return `200`, check the Squid logs (see below).
+
+### Can't reach the setup page (`http://<proxy-ip>:3129/`)
+
+The setup server (Python, port 3129) runs as a background process alongside Squid. Check the service logs — if Squid itself failed to start, the setup server may have also exited.
+
+On macOS, the firewall may block incoming connections on port 3129. Go to **System Settings → Network → Firewall** and add an exception, or temporarily disable the firewall to test.
+
+### Service won't start
+
+**Check for port conflicts.** The proxy uses ports 3128, 3129, and 3130. If any are in use:
+```bash
+sudo ss -tlnp | grep -E '3128|3129|3130'
+```
+
+**Check logs:**
+
+macOS:
+```bash
+tail -100 /usr/local/squid/var/logs/squid-service.log
+```
+
+Linux:
+```bash
+sudo journalctl -u squid-sslbump -n 100
+```
+
+**First-start SSL database error.** On first start, `squid-init.sh` generates a CA certificate and initializes the SSL database. If this fails (e.g. due to permissions), delete the generated files and restart:
+```bash
+sudo rm -rf /usr/local/squid/ssl /usr/local/squid/var/lib/ssl_db
+sudo systemctl restart squid-sslbump   # Linux
+```
+
+### Linux: service not found after install
+
+The installer requires systemd. On minimal installs (some containers, WSL1), systemd may not be present. WSL2 on Windows 11 does support systemd — enable it in `/etc/wsl.conf`:
+```ini
+[boot]
+systemd=true
+```
+Then restart WSL (`wsl --shutdown` in PowerShell, then reopen).
+
+---
+
+## Building from source (Linux)
+
+Run `build-linux.sh` on an x86-64 Linux machine to produce tarballs for all three platforms.
+
+### Build dependencies
+
+```bash
+sudo apt-get install -y \
+    build-essential wget curl perl \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+    gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+    qemu-user-static binfmt-support
+```
+
+`qemu-user-static` and `binfmt-support` are required to run the arm64/armv7 cross-compiled build tools (`cf_gen` etc.) on the x86-64 host during compilation. The build script checks for missing packages and prompts to install them automatically.
+
+### Running the build
+
+```bash
+bash build-linux.sh
+```
+
+Output tarballs are written to `./dist/`. Each contains the Squid binary, helpers, config template, startup wrapper, systemd unit, and install/uninstall scripts.
+
+Building takes roughly 20–40 minutes on typical hardware (arm64/armv7 are slower due to cross-compilation and QEMU emulation of build tools).
+
+---
+
 ## Notes
 
 - Weak encryption and disabled certificate verification are intentional — required for retro devices with outdated SSL stacks.
