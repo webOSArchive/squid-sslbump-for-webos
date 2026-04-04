@@ -207,27 +207,24 @@ build_squid_arch() {
 
 make_universal() {
     log "Creating universal (fat) binaries with lipo..."
-    local uni_dir="$BUILD_DIR/squid-macos-universal"
-    rm -rf "$uni_dir"
-    mkdir -p "$uni_dir/sbin" "$uni_dir/libexec"
 
     # DESTDIR install puts files under $BUILD_DIR/squid-macos-$arch/usr/local/squid/
     local arm64_staged="$BUILD_DIR/squid-macos-arm64/usr/local/squid"
     local x86_staged="$BUILD_DIR/squid-macos-x86_64/usr/local/squid"
+    local uni_dir="$BUILD_DIR/squid-macos-universal"
 
-    # Squid main binary
-    lipo -create \
-        "$arm64_staged/sbin/squid" \
-        "$x86_staged/sbin/squid" \
-        -output "$uni_dir/sbin/squid"
+    rm -rf "$uni_dir"
+    cp -r "$arm64_staged/." "$uni_dir/"
 
-    # Cert generation binary
-    for bin_name in security_file_certgen ssl_crtd; do
-        local arm64_bin="$arm64_staged/libexec/$bin_name"
-        local x86_bin="$x86_staged/libexec/$bin_name"
-        if [ -f "$arm64_bin" ] && [ -f "$x86_bin" ]; then
-            lipo -create "$arm64_bin" "$x86_bin" -output "$uni_dir/libexec/$bin_name"
-            break
+    # Lipo every Mach-O binary that has a matching x86_64 counterpart.
+    # This covers squid, security_file_certgen, log_file_daemon, diskd,
+    # unlinkd, all auth helpers, and anything else Squid installs.
+    find "$uni_dir" -type f | while read -r uni_bin; do
+        local rel="${uni_bin#${uni_dir}/}"
+        local x86_bin="$x86_staged/$rel"
+        if [ -f "$x86_bin" ] && file "$uni_bin" | grep -q "Mach-O"; then
+            lipo -create "$uni_bin" "$x86_bin" -output "$uni_bin"
+            echo "Universal: $rel"
         fi
     done
 
@@ -245,17 +242,12 @@ build_pkg() {
 
     rm -rf "$pkg_root" "$pkg_scripts"
 
-    # Use the full arm64 DESTDIR tree as the payload base — this includes mime.conf,
-    # error pages, and all other runtime data files Squid needs.
-    cp -r "$BUILD_DIR/squid-macos-arm64/." "$pkg_root/"
+    # Use the universal tree as payload base — all Mach-O binaries are already
+    # lipo'd for arm64+x86_64. Data files (mime.conf, error pages, etc.) come
+    # from the arm64 build since they are arch-independent.
+    mkdir -p "$pkg_root/usr/local/squid"
+    cp -r "$uni_dir/." "$pkg_root/usr/local/squid/"
     local squid_root="$pkg_root$INSTALL_PREFIX"
-
-    # Replace arch-specific binaries with universal (lipo'd) versions
-    cp "$uni_dir/sbin/squid" "$squid_root/sbin/"
-    for bin_name in security_file_certgen ssl_crtd; do
-        [ -f "$uni_dir/libexec/$bin_name" ] && \
-            cp "$uni_dir/libexec/$bin_name" "$squid_root/libexec/" || true
-    done
 
     # Add our custom scripts and config (overlay on top of DESTDIR)
     mkdir -p "$squid_root/bin" "$squid_root/ssl" \

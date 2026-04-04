@@ -1,6 +1,6 @@
 # squid-sslbump-for-webos
 
-An SSL-bumping proxy that gives retro webOS devices (Palm Pre, HP TouchPad, LG webOS Smart TVs, etc.) access to modern HTTPS websites. The proxy intercepts HTTPS connections and re-signs them with its own certificate, bridging the gap between devices with outdated SSL stacks and the modern web.
+An SSL-bumping proxy that gives retro webOS devices (Palm Pre, HP TouchPad, etc.) access to modern HTTPS websites. The proxy intercepts HTTPS connections and re-signs them with its own certificate, bridging the gap between devices with outdated SSL stacks and the modern web.
 
 > **Note:** This proxy is intentionally permissive — it accepts weak ciphers, skips upstream certificate verification, and allows all clients. It is designed for use on a private home network, not exposed to the internet. Restrict access with your router's firewall.
 
