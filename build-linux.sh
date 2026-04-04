@@ -161,7 +161,7 @@ build_squid() {
         "--enable-ssl-crtd"
         "--with-large-files"
         "--enable-icap-client"
-        "--enable-basic-auth-helpers=NCSA"
+        "--disable-auth"
         "--disable-esi"
         "--disable-snmp"
         "--without-gss"
@@ -190,6 +190,10 @@ build_squid() {
         # the cross-compiler does not accept.
         export CFLAGS="-g -O2"
         export CXXFLAGS="-g -O2"
+        # Point QEMU user-mode emulation at the cross-sysroot so it can find
+        # the target dynamic linker when running cross-compiled build tools
+        # (e.g. cf_gen) on the build host via binfmt_misc.
+        export QEMU_LD_PREFIX="/usr/${host}"
         # Provide cache values for configure tests that require execution
         # (can't run cross-compiled binaries on the build host)
         cat > cross-cache.conf <<EOF
@@ -215,7 +219,7 @@ EOF
     popd > /dev/null
     rm -rf "$build_dir"
 
-    unset CC CXX AR RANLIB STRIP PKG_CONFIG_PATH CPPFLAGS LDFLAGS CFLAGS CXXFLAGS
+    unset CC CXX AR RANLIB STRIP PKG_CONFIG_PATH CPPFLAGS LDFLAGS CFLAGS CXXFLAGS QEMU_LD_PREFIX
 }
 
 package_target() {
