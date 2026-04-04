@@ -3,7 +3,8 @@ if [ $(id -u) -ne 0 ]; then
   printf "Script must be run with sudo\n"
   exit 1
 fi
-echo "" && echo "Squid SSL Bump Simplified Install" 
+set -e
+echo "" && echo "Squid SSL Bump Simplified Install"
 echo "---------------------------------"
 pushd . > /dev/null
 SQUID_USER=squid
@@ -30,27 +31,35 @@ mkdir -p $SQUID_DIR/var/lib
 mkdir -p $SQUID_DIR/ssl
 $SQUID_DIR/libexec/ssl_crtd -c -s $SQUID_DIR/var/lib/ssl_db
 mkdir -p $SQUID_DIR/var/cache
-useradd $SQUID_USER -U -b $SQUID_DIR
+useradd $SQUID_USER -U -b $SQUID_DIR || true
 chown -R ${SQUID_USER}:${SQUID_USER} $SQUID_DIR
 popd > /dev/null
 chmod +x ./startsquid.sh
 mv ./startsquid.sh $SQUID_DIR/
-export PATH=$PATH:$SQUID_DIR
 
-# set config
-echo "" && echo "Updating Squid Config..."
-echo "#====added config===" >> $SQUID_DIR/etc/squid.conf
-echo "cache_effective_user $SQUID_USER" >> $SQUID_DIR/etc/squid.conf
-echo "cache_effective_group $SQUID_USER" >> $SQUID_DIR/etc/squid.conf
-echo "always_direct allow all" >> $SQUID_DIR/etc/squid.conf
-echo "icap_service_failure_limit -1" >> $SQUID_DIR/etc/squid.conf
-echo "ssl_bump server-first all" >> $SQUID_DIR/etc/squid.conf
-echo "sslproxy_cert_error allow all" >> $SQUID_DIR/etc/squid.conf
-echo "sslproxy_flags DONT_VERIFY_PEER" >> $SQUID_DIR/etc/squid.conf
-sed "/^http_port 3128$/d" -i $SQUID_DIR/etc/squid.conf
-sed "s/^http_access allow localnet$/http_access allow all/" -i $SQUID_DIR/etc/squid.conf
-echo "http_port 3128 ssl-bump generate-host-certificates=on cert=$SQUID_DIR/ssl/localCert.crt key=$SQUID_DIR/ssl/localCert.pem" >> $SQUID_DIR/etc/squid.conf
-#cat $SQUID_DIR/etc/squid.conf | grep added\ config -A1000 #fflush()
+# add squid to system PATH
+SQUID_PATH_FILE=/etc/profile.d/squid.sh
+echo "export PATH=\$PATH:$SQUID_DIR/sbin:$SQUID_DIR" > $SQUID_PATH_FILE
+chmod +x $SQUID_PATH_FILE
+export PATH=$PATH:$SQUID_DIR/sbin:$SQUID_DIR
+
+# set config (idempotent: skip if already applied)
+if ! grep -q "#====added config===" $SQUID_DIR/etc/squid.conf; then
+  echo "" && echo "Updating Squid Config..."
+  echo "#====added config===" >> $SQUID_DIR/etc/squid.conf
+  echo "cache_effective_user $SQUID_USER" >> $SQUID_DIR/etc/squid.conf
+  echo "cache_effective_group $SQUID_USER" >> $SQUID_DIR/etc/squid.conf
+  echo "always_direct allow all" >> $SQUID_DIR/etc/squid.conf
+  echo "icap_service_failure_limit -1" >> $SQUID_DIR/etc/squid.conf
+  echo "ssl_bump server-first all" >> $SQUID_DIR/etc/squid.conf
+  echo "sslproxy_cert_error allow all" >> $SQUID_DIR/etc/squid.conf
+  echo "sslproxy_flags DONT_VERIFY_PEER" >> $SQUID_DIR/etc/squid.conf
+  sed "/^http_port 3128$/d" -i $SQUID_DIR/etc/squid.conf
+  sed "s/^http_access allow localnet$/http_access allow all/" -i $SQUID_DIR/etc/squid.conf
+  echo "http_port 3128 ssl-bump generate-host-certificates=on cert=$SQUID_DIR/ssl/localCert.crt key=$SQUID_DIR/ssl/localCert.pem" >> $SQUID_DIR/etc/squid.conf
+else
+  echo "" && echo "Squid config already applied, skipping."
+fi
 
 # done
 echo ""
