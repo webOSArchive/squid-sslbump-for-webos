@@ -31,11 +31,86 @@ Supported platforms:
 
 > **Raspberry Pi 4/5:** Use `linux-arm64`. The `armv7` build will not run on a 64-bit OS — you'll get a startup error about a missing file even though the binary is present.
 
-### Windows (WSL2)
+### Windows
+
+Two options: Docker Desktop (simpler) or WSL2 (more control).
+
+---
+
+#### Option A: Docker Desktop
+
+**1. Install Docker Desktop**
+
+Download and install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/). No WSL2 or Linux setup required.
+
+**2. Find your Windows machine's LAN IP**
+
+```powershell
+ipconfig
+```
+
+Look for the IPv4 address on your Wi-Fi or Ethernet adapter (e.g. `192.168.1.50`).
+
+**3. Create a `docker-compose.yml`**
+
+Save this file somewhere convenient (e.g. `C:\squid-proxy\docker-compose.yml`), substituting your LAN IP:
+
+```yaml
+services:
+  squid:
+    image: webosarchive/squid-sslbump-for-webos:latest
+    restart: unless-stopped
+    ports:
+      - "3128:3128"
+      - "3129:3129"
+      - "3130:3130"
+    volumes:
+      - squid-ssl:/usr/local/squid/ssl
+      - squid-ssldb:/usr/local/squid/var/lib/ssl_db
+      - squid-archive:/usr/local/squid/var/archive
+      - squid-logs:/usr/local/squid/var/logs
+    environment:
+      - PROXY_IP=192.168.1.50   # ← replace with your Windows machine's LAN IP
+
+volumes:
+  squid-ssl:
+  squid-ssldb:
+  squid-archive:
+  squid-logs:
+```
+
+**4. Start the proxy**
+
+Open PowerShell in the same folder and run:
+
+```powershell
+docker compose up -d
+```
+
+The proxy starts automatically on boot as long as Docker Desktop is running.
+
+**5. Allow the ports through Windows Firewall**
+
+Run in an elevated PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "squid-sslbump proxy" -Direction Inbound -Protocol TCP -LocalPort 3128 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "squid-sslbump setup" -Direction Inbound -Protocol TCP -LocalPort 3129 -Action Allow -Profile Private
+```
+
+**6. Open the setup page**
+
+Browse to `http://<your-LAN-IP>:3129/` from any browser to download the CA cert and get device setup instructions.
+
+To stop: `docker compose down`. Your certificate and installed add-ons are preserved in Docker volumes.
+
+---
+
+#### Option B: WSL2
 
 Use the `linux-amd64` tarball inside Windows Subsystem for Linux 2 (WSL2). WSL2 on Windows 11 supports systemd, so the service installs and runs the same way as Linux.
 
-#### Enable systemd
+**Enable systemd**
 
 Systemd is required and must be enabled before installing. Add this to `/etc/wsl.conf` inside WSL:
 
@@ -50,7 +125,7 @@ Then restart WSL from PowerShell and reopen your terminal:
 wsl --shutdown
 ```
 
-#### Networking: make the proxy reachable on your LAN
+**Networking: make the proxy reachable on your LAN**
 
 WSL2 runs behind NAT with its own private IP. Retro devices on your network can't reach it by default. Enable mirrored networking by adding this to `%USERPROFILE%\.wslconfig` on Windows (create the file if it doesn't exist):
 
@@ -61,7 +136,7 @@ networkingMode=mirrored
 
 Then restart WSL (`wsl --shutdown` in PowerShell). The proxy will be reachable on your Windows machine's LAN IP address — no further configuration needed.
 
-#### Windows Firewall
+**Windows Firewall**
 
 You also need to allow inbound connections through Windows Firewall. Run in an elevated PowerShell:
 
@@ -124,6 +199,11 @@ Linux:
 sudo systemctl status squid-sslbump
 ```
 
+Docker:
+```bash
+docker compose ps
+```
+
 **2. Check the proxy port is listening**
 ```bash
 netstat -an | grep 3128
@@ -152,6 +232,11 @@ Linux:
 sudo journalctl -u squid-sslbump -f
 ```
 
+Docker:
+```bash
+docker compose logs -f
+```
+
 ---
 
 ## Uninstalling
@@ -168,6 +253,15 @@ sudo ./uninstall.sh
 (The `uninstall.sh` is included in the same tarball as `install.sh`.)
 
 Both uninstallers will ask whether to remove your configuration and certificates (default: keep them), and whether to remove the `squid` system user.
+
+### Docker
+```bash
+docker compose down
+```
+This stops the container but preserves all volumes (your cert and add-ons). To also delete the volumes:
+```bash
+docker compose down -v
+```
 
 ---
 
@@ -215,6 +309,11 @@ Linux:
 sudo journalctl -u squid-sslbump -n 100
 ```
 
+Docker:
+```bash
+docker compose logs --tail=100
+```
+
 **First-start SSL database error.** On first start, `squid-init.sh` generates a CA certificate and initializes the SSL database. If this fails (e.g. due to permissions), delete the generated files and restart:
 ```bash
 sudo rm -rf /usr/local/squid/ssl /usr/local/squid/var/lib/ssl_db
@@ -232,11 +331,36 @@ Then restart WSL (`wsl --shutdown` in PowerShell, then reopen).
 
 ### WSL2: retro device can't reach the proxy
 
-WSL2 runs behind NAT — your retro device can't connect to the proxy using your Windows machine's IP unless you configure networking. See the [Windows (WSL2)](#windows-wsl2) installation section for mirrored networking (recommended) and port forwarding options.
+WSL2 runs behind NAT — your retro device can't connect to the proxy using your Windows machine's IP unless you configure networking. See the [Windows](#windows) installation section for mirrored networking (recommended) and port forwarding options.
+
+### Docker: setup page shows wrong proxy IP
+
+The setup page may display the container's internal IP (`172.17.x.x`) instead of your machine's LAN IP. Set the `PROXY_IP` environment variable in your `docker-compose.yml` to your machine's LAN IP address (see the Windows Docker installation steps above). This is display-only — the proxy itself works regardless.
 
 ---
 
-## Building from source (Linux)
+## Building from source
+
+### Docker image
+
+To build the Docker image from source (amd64):
+
+```bash
+docker build -t squid-sslbump-for-webos:latest .
+```
+
+For multi-arch (amd64 + arm64) with `docker buildx`:
+
+```bash
+docker buildx create --use --name multiarch --driver docker-container
+docker run --privileged --rm tonistiigi/binfmt --install all
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t webosarchive/squid-sslbump-for-webos:latest --push .
+```
+
+The first build takes 30–60 minutes (Squid compiles from source). Subsequent builds are fast with a warm layer cache.
+
+### Linux tarballs
 
 Run `build-linux.sh` on an x86-64 Linux machine to produce tarballs for all three platforms.
 

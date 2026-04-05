@@ -134,6 +134,10 @@ def _run_install(addon):
 # ---------------------------------------------------------------------------
 
 def local_ip():
+    # Allow Docker users to override with the host machine's LAN IP, since
+    # the container's default route interface returns an internal bridge IP.
+    if os.environ.get("PROXY_IP"):
+        return os.environ["PROXY_IP"]
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))

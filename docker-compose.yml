@@ -1,0 +1,25 @@
+services:
+  squid:
+    image: webosarchive/squid-sslbump-for-webos:latest
+    restart: unless-stopped
+    ports:
+      - "3128:3128"   # Squid proxy — retro devices point here
+      - "3129:3129"   # Setup page (cert download, add-on manager)
+      - "3130:3130"   # Archive server (local restored websites)
+    volumes:
+      - squid-ssl:/usr/local/squid/ssl
+      - squid-ssldb:/usr/local/squid/var/lib/ssl_db
+      - squid-archive:/usr/local/squid/var/archive
+      - squid-logs:/usr/local/squid/var/logs
+    # Optional: set PROXY_IP to your host machine's LAN IP so the setup page
+    # displays the correct address for device configuration. If unset, the
+    # setup page will show the container's internal IP, which won't be reachable
+    # from retro devices. Find your host IP with: ip route / ipconfig / ifconfig
+    # environment:
+    #   - PROXY_IP=192.168.1.x
+
+volumes:
+  squid-ssl:
+  squid-ssldb:
+  squid-archive:
+  squid-logs:

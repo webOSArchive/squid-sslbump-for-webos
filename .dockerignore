@@ -1,0 +1,9 @@
+build/
+dist/
+*.pkg
+*.tar.gz
+scripts/
+build-macos.sh
+.git/
+.gitignore
+*.md
