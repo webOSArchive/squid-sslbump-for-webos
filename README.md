@@ -162,6 +162,8 @@ WSL1 and some minimal installs don't have systemd. WSL2 does — enable it per [
 
 ## Building from source
 
+**Python 3.6+** is required to run or modify the setup and archive server scripts (`setup-server.py`, `archive-server.py`). Both use f-strings throughout. No additional packages beyond the standard library are needed.
+
 ### Docker image
 
 ```bash
