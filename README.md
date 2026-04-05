@@ -183,7 +183,6 @@ First build takes 30–60 minutes (Squid compiles from source).
 Run `build-macos.sh` from Terminal. 
 
 Signing and notarization will require an Apple Developer account.
-
 Copy `set-apple-vars.example` to `set-apple-vars.sh` and update with your Developer credentials.
 
 The installer package is written to `./dist/`.
