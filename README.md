@@ -97,7 +97,7 @@ Should show `LISTEN` on port 3128.
 
 **3. Send a test request through the proxy**
 ```bash
-curl -x http://localhost:3128 https://example.com -o /dev/null -w "%{http_code}\n"
+curl -k -x http://localhost:3128 https://example.com -o /dev/null -w "%{http_code}\n"
 ```
 Should print `200`.
 
