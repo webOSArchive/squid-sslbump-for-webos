@@ -10,9 +10,9 @@ An SSL-bumping proxy that gives retro webOS devices (Palm Pre, HP TouchPad, etc.
 
 ### macOS
 
-Download the latest `squid-sslbump-for-webos-macos-universal.pkg` from the [Releases](../../releases) page and double-click to install. The proxy starts automatically and runs as a background service.
+Download the latest `squid-sslbump-for-webos-macos-universal.pkg` from the [Releases](../../releases) page and double-click to install. The proxy starts automatically and runs as a background service. 
 
-Supported platforms are Mojave and up, on both Intel and Apple Silicon.
+Platforms supported are Mojave and up, Intel and Apple Silicon.
 
 ### Linux (x86-64, Raspberry Pi)
 
@@ -24,318 +24,139 @@ cd squid-sslbump-for-webos-linux-<arch>
 sudo ./install.sh
 ```
 
-Supported platforms:
-- `linux-amd64` — x86-64 desktop/server
-- `linux-arm64` — Raspberry Pi 4 and 5 (64-bit OS)
-- `linux-armv7` — Raspberry Pi Zero, 2, and 3 (32-bit OS only)
-
-> **Raspberry Pi 4/5:** Use `linux-arm64`. The `armv7` build will not run on a 64-bit OS — you'll get a startup error about a missing file even though the binary is present.
+| Platform | Use for |
+|----------|---------|
+| `linux-amd64` | x86-64 desktop/server |
+| `linux-arm64` | Raspberry Pi 4 and 5 (64-bit OS) |
+| `linux-armv7` | Raspberry Pi Zero, 2, and 3 (32-bit OS) |
 
 ### Windows
 
 Two options: Docker Desktop (simpler) or WSL2 (more control).
 
----
-
 #### Option A: Docker Desktop
 
-**1. Install Docker Desktop**
-
-Download and install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/). No WSL2 or Linux setup required.
-
-**2. Find your Windows machine's LAN IP**
-
-```powershell
-ipconfig
-```
-
-Look for the IPv4 address on your Wi-Fi or Ethernet adapter (e.g. `192.168.1.50`).
-
-**3. Create a `docker-compose.yml`**
-
-Save this file somewhere convenient (e.g. `C:\squid-proxy\docker-compose.yml`), substituting your LAN IP:
-
-```yaml
-services:
-  squid:
-    image: webosarchive/squid-sslbump-for-webos:latest
-    restart: unless-stopped
-    ports:
-      - "3128:3128"
-      - "3129:3129"
-      - "3130:3130"
-    volumes:
-      - squid-ssl:/usr/local/squid/ssl
-      - squid-ssldb:/usr/local/squid/var/lib/ssl_db
-      - squid-archive:/usr/local/squid/var/archive
-      - squid-logs:/usr/local/squid/var/logs
-    environment:
-      - PROXY_IP=192.168.1.50   # ← replace with your Windows machine's LAN IP
-
-volumes:
-  squid-ssl:
-  squid-ssldb:
-  squid-archive:
-  squid-logs:
-```
-
-**4. Start the proxy**
-
-Open PowerShell in the same folder and run:
-
-```powershell
-docker compose up -d
-```
+1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
+2. Copy `docker-compose.yml` from this repo to a folder on your machine.
+3. Edit the `PROXY_IP` line to your Windows machine's LAN IP (`ipconfig` to find it).
+4. Open PowerShell in that folder and run `docker compose up -d`.
+5. Allow the ports through Windows Firewall (elevated PowerShell):
+   ```powershell
+   New-NetFirewallRule -DisplayName "squid-sslbump proxy" -Direction Inbound -Protocol TCP -LocalPort 3128 -Action Allow -Profile Private
+   New-NetFirewallRule -DisplayName "squid-sslbump setup" -Direction Inbound -Protocol TCP -LocalPort 3129 -Action Allow -Profile Private
+   ```
 
 The proxy starts automatically on boot as long as Docker Desktop is running.
 
-**5. Allow the ports through Windows Firewall**
-
-Run in an elevated PowerShell:
-
-```powershell
-New-NetFirewallRule -DisplayName "squid-sslbump proxy" -Direction Inbound -Protocol TCP -LocalPort 3128 -Action Allow -Profile Private
-New-NetFirewallRule -DisplayName "squid-sslbump setup" -Direction Inbound -Protocol TCP -LocalPort 3129 -Action Allow -Profile Private
-```
-
-**6. Open the setup page**
-
-Browse to `http://<your-LAN-IP>:3129/` from any browser to download the CA cert and get device setup instructions.
-
-To stop: `docker compose down`. Your certificate and installed add-ons are preserved in Docker volumes.
-
----
-
 #### Option B: WSL2
 
-Use the `linux-amd64` tarball inside Windows Subsystem for Linux 2 (WSL2). WSL2 on Windows 11 supports systemd, so the service installs and runs the same way as Linux.
+Use the `linux-amd64` tarball inside WSL2. WSL2 on Windows 11 supports systemd, so install works the same as Linux.
 
-**Enable systemd**
-
-Systemd is required and must be enabled before installing. Add this to `/etc/wsl.conf` inside WSL:
-
+**Enable systemd** — add to `/etc/wsl.conf` inside WSL, then `wsl --shutdown` in PowerShell:
 ```ini
 [boot]
 systemd=true
 ```
 
-Then restart WSL from PowerShell and reopen your terminal:
-
-```powershell
-wsl --shutdown
-```
-
-**Networking: make the proxy reachable on your LAN**
-
-WSL2 runs behind NAT with its own private IP. Retro devices on your network can't reach it by default. Enable mirrored networking by adding this to `%USERPROFILE%\.wslconfig` on Windows (create the file if it doesn't exist):
-
+**Enable mirrored networking** — add to `%USERPROFILE%\.wslconfig` on Windows, then `wsl --shutdown`:
 ```ini
 [wsl2]
 networkingMode=mirrored
 ```
-
-Then restart WSL (`wsl --shutdown` in PowerShell). The proxy will be reachable on your Windows machine's LAN IP address — no further configuration needed.
-
-**Windows Firewall**
-
-You also need to allow inbound connections through Windows Firewall. Run in an elevated PowerShell:
-
-```powershell
-New-NetFirewallRule -DisplayName "squid-sslbump proxy" -Direction Inbound -Protocol TCP -LocalPort 3128 -Action Allow -Profile Private
-New-NetFirewallRule -DisplayName "squid-sslbump setup" -Direction Inbound -Protocol TCP -LocalPort 3129 -Action Allow -Profile Private
-```
+This makes the proxy reachable on your Windows machine's LAN IP. Then install using the Linux steps above and open the firewall ports (see Option A step 5).
 
 ---
 
 ## Setup: configure your device
 
-Once installed, open the setup page in a browser:
+Once installed, open `http://<proxy-ip>:3129/` in a browser (or `http://localhost:3129/` on the proxy machine). This page shows your proxy address, lets you download the CA certificate, and has step-by-step setup instructions for webOS devices.
 
-On the computer you installed on:
-
-```
-http://localhost:3129/
-```
-
-Or on any other computer on your network, go to:
-
-```
-http://<proxy-ip>:3129/
-```
-
-This page shows your proxy address and port, lets you download the CA certificate, and has step-by-step setup instructions for common webOS devices.
-
-### Proxy settings to enter on your retro device
+Configure your retro device to use:
 
 | Setting | Value |
 |---------|-------|
-| Proxy host | your computer's IP address |
+| Proxy host | your proxy machine's IP |
 | Proxy port | `3128` |
 
-### CA certificate
-
-Your device needs to trust the proxy's certificate to avoid SSL errors. Download and install it from the setup page, or fetch it directly:
-
-```
-http://<proxy-ip>:3129/cert
-```
-
-The certificate is also available on disk at `/usr/local/squid/ssl/localCert.der` after the first service start.
+The CA certificate must be installed as a **trusted CA** on the device to avoid SSL errors. Follow the device-specific instructions on the setup page — the steps differ between Palm Pre/Pixi and HP TouchPad.
 
 ---
 
 ## Verifying it works
 
-**1. Check the service is running**
+Check the service is running:
 
-macOS:
-```bash
-sudo launchctl list | grep squid
-```
-A PID (not `-`) next to `com.squid-sslbump-for-webos` means it's running.
+| Platform | Command |
+|----------|---------|
+| macOS | `sudo launchctl list \| grep squid` |
+| Linux | `sudo systemctl status squid-sslbump` |
+| Docker | `docker compose ps` |
 
-Linux:
-```bash
-sudo systemctl status squid-sslbump
-```
-
-Docker:
-```bash
-docker compose ps
-```
-
-**2. Check the proxy port is listening**
-```bash
-netstat -an | grep 3128
-```
-Should show `LISTEN` on port 3128.
-
-**3. Send a test request through the proxy**
+Test the proxy:
 ```bash
 curl -k -x http://localhost:3128 https://example.com -o /dev/null -w "%{http_code}\n"
 ```
 Should print `200`.
 
-**4. Check the setup page is up**
+Check logs:
 
-Open `http://localhost:3129/` in a browser. You should see the setup page with a working cert download link.
-
-**5. Check logs if something looks wrong**
-
-macOS:
-```bash
-tail -f /usr/local/squid/var/logs/squid-service.log
-```
-
-Linux:
-```bash
-sudo journalctl -u squid-sslbump -f
-```
-
-Docker:
-```bash
-docker compose logs -f
-```
+| Platform | Command |
+|----------|---------|
+| macOS | `tail -f /usr/local/squid/var/logs/squid-service.log` |
+| Linux | `sudo journalctl -u squid-sslbump -f` |
+| Docker | `docker compose logs -f` |
 
 ---
 
 ## Uninstalling
 
-### macOS
-```bash
-sudo /usr/local/squid/bin/uninstall.sh
-```
+**macOS:** `sudo /usr/local/squid/bin/uninstall.sh`
 
-### Linux
-```bash
-sudo ./uninstall.sh
-```
-(The `uninstall.sh` is included in the same tarball as `install.sh`.)
+**Linux:** `sudo ./uninstall.sh` (included in the tarball alongside `install.sh`)
 
-Both uninstallers will ask whether to remove your configuration and certificates (default: keep them), and whether to remove the `squid` system user.
+Both uninstallers prompt before removing certificates and the `squid` system user.
 
-### Docker
-```bash
-docker compose down
-```
-This stops the container but preserves all volumes (your cert and add-ons). To also delete the volumes:
-```bash
-docker compose down -v
-```
+**Docker:** `docker compose down` (stops the container, preserves volumes). Add `-v` to also delete volumes.
 
 ---
 
 ## Troubleshooting
 
-### Device still shows SSL errors after installing the certificate
-
-The certificate must be installed as a **trusted CA**, not just a regular certificate. On webOS devices, use the setup page (`http://<proxy-ip>:3129/`) and follow the device-specific instructions — the steps differ between Palm Pre/Pixi and HP TouchPad.
-
-If the setup page shows the cert download but the device won't accept it, try fetching the `.der` file directly:
-```
-http://<proxy-ip>:3129/cert
-```
-
-### Device can connect to the proxy but websites fail
-
-Check that the device has the CA certificate installed and trusted. Then test the proxy itself from your computer:
-```bash
-curl -x http://localhost:3128 https://example.com -o /dev/null -w "%{http_code}\n"
-```
-If this doesn't return `200`, check the Squid logs (see below).
-
-### Can't reach the setup page (`http://<proxy-ip>:3129/`)
-
-The setup server (Python, port 3129) runs as a background process alongside Squid. Check the service logs — if Squid itself failed to start, the setup server may have also exited.
-
-On macOS, the firewall may block incoming connections on port 3129. Go to **System Settings → Network → Firewall** and add an exception, or temporarily disable the firewall to test.
-
 ### Service won't start
 
-**Check for port conflicts.** The proxy uses ports 3128, 3129, and 3130. If any are in use:
+Check for port conflicts on 3128, 3129, 3130:
 ```bash
 sudo ss -tlnp | grep -E '3128|3129|3130'
 ```
+Check logs (see commands in [Verifying it works](#verifying-it-works) above).
 
-**Check logs:**
-
-macOS:
-```bash
-tail -100 /usr/local/squid/var/logs/squid-service.log
-```
-
-Linux:
-```bash
-sudo journalctl -u squid-sslbump -n 100
-```
-
-Docker:
-```bash
-docker compose logs --tail=100
-```
-
-**First-start SSL database error.** On first start, `squid-init.sh` generates a CA certificate and initializes the SSL database. If this fails (e.g. due to permissions), delete the generated files and restart:
+**First-start failure:** If cert or SSL database initialization fails, remove the generated files and restart:
 ```bash
 sudo rm -rf /usr/local/squid/ssl /usr/local/squid/var/lib/ssl_db
-sudo systemctl restart squid-sslbump   # Linux
+sudo systemctl restart squid-sslbump   # Linux; or docker compose restart for Docker
 ```
 
-### Linux: service not found after install
+### Device still shows SSL errors
 
-The installer requires systemd. On minimal installs (some containers, WSL1), systemd may not be present. WSL2 on Windows 11 does support systemd — enable it in `/etc/wsl.conf`:
-```ini
-[boot]
-systemd=true
-```
-Then restart WSL (`wsl --shutdown` in PowerShell, then reopen).
+The certificate must be installed as a **trusted CA**, not a regular certificate. Use the setup page and follow the device-specific instructions.
+
+### Can't reach the setup page
+
+The setup server (port 3129) runs alongside Squid — if Squid failed to start, the setup server exits too. Check logs for Squid errors.
+
+On macOS, System Settings → Network → Firewall may be blocking port 3129.
 
 ### WSL2: retro device can't reach the proxy
 
-WSL2 runs behind NAT — your retro device can't connect to the proxy using your Windows machine's IP unless you configure networking. See the [Windows](#windows) installation section for mirrored networking (recommended) and port forwarding options.
+See the mirrored networking step in [Option B: WSL2](#option-b-wsl2) above.
 
 ### Docker: setup page shows wrong proxy IP
 
-The setup page may display the container's internal IP (`172.17.x.x`) instead of your machine's LAN IP. Set the `PROXY_IP` environment variable in your `docker-compose.yml` to your machine's LAN IP address (see the Windows Docker installation steps above). This is display-only — the proxy itself works regardless.
+The setup page may show the container's internal IP instead of your machine's LAN IP. Set `PROXY_IP` in `docker-compose.yml` to your machine's LAN IP. This is display-only — the proxy itself works regardless.
+
+### Linux: systemd not found after install
+
+WSL1 and some minimal installs don't have systemd. WSL2 does — enable it per [Option B: WSL2](#option-b-wsl2) above.
 
 ---
 
@@ -343,14 +164,11 @@ The setup page may display the container's internal IP (`172.17.x.x`) instead of
 
 ### Docker image
 
-To build the Docker image from source (amd64):
-
 ```bash
 docker build -t squid-sslbump-for-webos:latest .
 ```
 
-For multi-arch (amd64 + arm64) with `docker buildx`:
-
+Multi-arch (amd64 + arm64):
 ```bash
 docker buildx create --use --name multiarch --driver docker-container
 docker run --privileged --rm tonistiigi/binfmt --install all
@@ -358,51 +176,13 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   -t webosarchive/squid-sslbump-for-webos:latest --push .
 ```
 
-The first build takes 30–60 minutes (Squid compiles from source). Subsequent builds are fast with a warm layer cache.
+First build takes 30–60 minutes (Squid compiles from source).
 
 ### Linux tarballs
 
-Run `build-linux.sh` on an x86-64 Linux machine to produce tarballs for all three platforms.
+Run `build-linux.sh` on an x86-64 Linux machine. If Docker is available, the script automatically builds inside `ubuntu:20.04` to pin glibc to 2.31 (Raspberry Pi OS Bullseye compatibility). Without Docker, it builds on the host with a warning if the host glibc is newer than the target.
 
-### Recommended: build with Docker
-
-If Docker is installed, the script automatically re-execs itself inside an `ubuntu:20.04` container. This pins glibc to 2.31, which matches Raspberry Pi OS Bullseye — ensuring the binaries run on all Pi OS versions from Bullseye onward.
-
-```bash
-bash build-linux.sh
-```
-
-Docker must be runnable by the current user (i.e. the user is in the `docker` group, or you prefix with `sudo`).
-
-### Without Docker
-
-If Docker is not available, the script builds on the host. The resulting binaries require the host's glibc version, which may be too new for older target systems. A warning is printed when this happens.
-
-Host build dependencies (installed automatically if missing):
-
-```bash
-sudo apt-get install -y \
-    build-essential wget curl perl \
-    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-    gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
-    qemu-user-static binfmt-support
-```
-
-`qemu-user-static` and `binfmt-support` are required to run the arm64/armv7 cross-compiled build tools on the x86-64 host during compilation (via QEMU binfmt_misc).
-
-### Output
-
-Tarballs are written to `./dist/`. Each contains the Squid binary, helpers, config template, startup wrapper, systemd unit, and install/uninstall scripts.
-
-Building takes roughly 20–40 minutes on typical hardware (arm64/armv7 are slower due to cross-compilation and QEMU emulation of build tools).
-
----
-
-## Notes
-
-- Weak encryption and disabled certificate verification are intentional — required for retro devices with outdated SSL stacks.
-- Keep this proxy on your private network. Use your router's firewall to limit which devices can reach port 3128.
-- Installed to `/usr/local/squid`. Config file at `/usr/local/squid/etc/squid.conf`.
+Output tarballs are written to `./dist/`.
 
 ---
 
