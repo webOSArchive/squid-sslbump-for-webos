@@ -55,7 +55,7 @@ http_access deny CONNECT !SSL_ports
 # ---------------------------------------------------------------
 # Domain blocklist
 # ---------------------------------------------------------------
-acl blocked_domains dstdomain .techradar.com techradar.com
+acl blocked_domains dstdomain .techradar.com
 http_access deny blocked_domains
 
 http_access allow all
