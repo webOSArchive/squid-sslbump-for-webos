@@ -51,6 +51,13 @@ acl CONNECT method CONNECT
 
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
+
+# ---------------------------------------------------------------
+# Domain blocklist
+# ---------------------------------------------------------------
+acl blocked_domains dstdomain .techradar.com techradar.com
+http_access deny blocked_domains
+
 http_access allow all
 
 # ---------------------------------------------------------------
@@ -58,7 +65,7 @@ http_access allow all
 # Requests to archived domains are routed to the archive server
 # on port 3130 instead of the internet.
 # ---------------------------------------------------------------
-acl archived_domains dstdomain help.palm.com downloads.help.palm.com
+acl archived_domains dstdomain help.palm.com downloads.help.palm.com www.google.com google.com
 
 cache_peer 127.0.0.1 parent 3130 0 no-query originserver name=archive
 cache_peer_access archive allow archived_domains

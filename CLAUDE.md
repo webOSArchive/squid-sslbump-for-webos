@@ -6,7 +6,7 @@ An SSL-bumping proxy for retro devices (Palm/HP webOS, legacy smart TVs) with ou
 
 The proxy intercepts HTTPS, re-signs with a local CA, and forwards. A setup web page (port 3129) handles cert download and device instructions. An archive server (port 3130) serves locally-hosted restored websites (e.g. help.palm.com) via Squid `cache_peer` routing.
 
-**All active development is on the `installable` branch.** `main` only has the original pre-installer files.
+**All active development is on `main`.** The `installable` branch has been merged.
 
 ## Key files
 

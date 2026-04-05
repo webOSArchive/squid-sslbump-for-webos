@@ -13,6 +13,7 @@ If a site is not installed, requests return 503 with an install prompt.
 import http.server
 import mimetypes
 import os
+import urllib.parse
 
 ARCHIVE_ROOT = "/usr/local/squid/var/archive"
 PORT = 3130
@@ -22,6 +23,9 @@ HOST_MAP = {
     "help.palm.com":           "help.palm.com",
     "downloads.help.palm.com": "help.palm.com",   # CNAME — same content
 }
+
+# Google domains to redirect to DuckDuckGo Lite
+GOOGLE_DOMAINS = {"www.google.com", "google.com"}
 
 MIME_EXTRA = {
     ".json": "application/json",
@@ -33,6 +37,11 @@ class ArchiveHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         host = self.headers.get("Host", "").split(":")[0].lower()
+
+        if host in GOOGLE_DOMAINS:
+            self._redirect_to_ddg()
+            return
+
         site_name = HOST_MAP.get(host)
 
         if not site_name:
@@ -101,6 +110,19 @@ class ArchiveHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "public, max-age=86400")
         self.end_headers()
         self.wfile.write(data)
+
+    def _redirect_to_ddg(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        q = params.get("q", [""])[0]
+        if q:
+            ddg_url = "https://lite.duckduckgo.com/lite/?" + urllib.parse.urlencode({"q": q})
+        else:
+            ddg_url = "https://lite.duckduckgo.com/lite/"
+        self.send_response(302)
+        self.send_header("Location", ddg_url)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _send_text(self, code, message):
         body = message.encode()
