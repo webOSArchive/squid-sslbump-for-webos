@@ -178,6 +178,14 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 First build takes 30–60 minutes (Squid compiles from source).
 
+### macOS Installer
+
+Run `build-macos.sh` from Terminal. 
+
+Signing and notarization will require an Apple Developer account.
+
+Copy `set-apple-vars.example` to `set-apple-vars.sh` and update with your Developer credentials.
+
 ### Linux tarballs
 
 Run `build-linux.sh` on an x86-64 Linux machine. If Docker is available, the script automatically builds inside `ubuntu:20.04` to pin glibc to 2.31 (Raspberry Pi OS Bullseye compatibility). Without Docker, it builds on the host with a warning if the host glibc is newer than the target.
