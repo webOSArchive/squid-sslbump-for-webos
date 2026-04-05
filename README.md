@@ -35,6 +35,55 @@ Supported platforms:
 
 Use the `linux-amd64` tarball inside WSL2. WSL2 on Windows 11 supports systemd, so the service installs and runs the same way as Linux.
 
+#### Enable systemd
+
+Systemd is required and must be enabled before installing. Add this to `/etc/wsl.conf` inside WSL:
+
+```ini
+[boot]
+systemd=true
+```
+
+Then restart WSL from PowerShell and reopen your terminal:
+
+```powershell
+wsl --shutdown
+```
+
+#### Networking: make the proxy reachable on your LAN
+
+WSL2 runs behind NAT with its own private IP. Retro devices on your network can't reach it by default. There are two solutions:
+
+**Option 1 — Mirrored networking (Windows 11 23H2 and later, recommended)**
+
+Add this to `%USERPROFILE%\.wslconfig` on Windows (create the file if it doesn't exist):
+
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+Then restart WSL (`wsl --shutdown` in PowerShell). The proxy will be reachable on your Windows machine's LAN IP address — no further configuration needed.
+
+**Option 2 — Port forwarding (older Windows)**
+
+Run the following in an elevated PowerShell each time WSL starts (the WSL IP changes on every restart):
+
+```powershell
+$wslIp = (wsl hostname -I).Trim()
+netsh interface portproxy add v4tov4 listenport=3128 listenaddress=0.0.0.0 connectport=3128 connectaddress=$wslIp
+netsh interface portproxy add v4tov4 listenport=3129 listenaddress=0.0.0.0 connectport=3129 connectaddress=$wslIp
+```
+
+#### Windows Firewall
+
+Either option above also requires allowing inbound connections through Windows Firewall. Run in an elevated PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "squid-sslbump proxy" -Direction Inbound -Protocol TCP -LocalPort 3128 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "squid-sslbump setup" -Direction Inbound -Protocol TCP -LocalPort 3129 -Action Allow -Profile Private
+```
+
 ---
 
 ## Setup: configure your device
@@ -194,6 +243,10 @@ The installer requires systemd. On minimal installs (some containers, WSL1), sys
 systemd=true
 ```
 Then restart WSL (`wsl --shutdown` in PowerShell, then reopen).
+
+### WSL2: retro device can't reach the proxy
+
+WSL2 runs behind NAT — your retro device can't connect to the proxy using your Windows machine's IP unless you configure networking. See the [Windows (WSL2)](#windows-wsl2) installation section for mirrored networking (recommended) and port forwarding options.
 
 ---
 
