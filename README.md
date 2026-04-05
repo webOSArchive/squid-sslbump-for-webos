@@ -33,7 +33,7 @@ Supported platforms:
 
 ### Windows (WSL2)
 
-Use the `linux-amd64` tarball inside WSL2. WSL2 on Windows 11 supports systemd, so the service installs and runs the same way as Linux.
+Use the `linux-amd64` tarball inside Windows Subsystem for Linux 2 (WSL2). WSL2 on Windows 11 supports systemd, so the service installs and runs the same way as Linux.
 
 #### Enable systemd
 
