@@ -85,7 +85,7 @@ maybe_use_docker() {
         --env SQUID_BUILD_IN_DOCKER=1 \
         --env DEBIAN_FRONTEND=noninteractive \
         "$DOCKER_IMAGE" \
-        bash build-linux.sh
+        bash build-linux.sh "$@"
     exit $?
 }
 
@@ -338,6 +338,25 @@ EOF
 }
 
 main() {
+    # Allow caller to restrict targets: ./build-linux.sh amd64
+    #                                   ./build-linux.sh arm64 armv7
+    if [ $# -gt 0 ]; then
+        local requested=("$@")
+        local filtered=()
+        for t in "${requested[@]}"; do
+            local valid=0
+            for known in "${TARGETS[@]}"; do
+                [ "$t" = "$known" ] && valid=1 && break
+            done
+            if [ "$valid" = "0" ]; then
+                echo "ERROR: Unknown target '$t'. Valid targets: ${TARGETS[*]}" >&2
+                exit 1
+            fi
+            filtered+=("$t")
+        done
+        TARGETS=("${filtered[@]}")
+    fi
+
     echo ""
     echo "squid-sslbump-for-webos — Linux build"
     echo "Squid $SQUID_VERSION + OpenSSL $OPENSSL_VERSION"
