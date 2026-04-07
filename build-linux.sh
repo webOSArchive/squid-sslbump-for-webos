@@ -363,7 +363,7 @@ main() {
     echo "Targets: ${TARGETS[*]}"
     echo ""
 
-    maybe_use_docker
+    maybe_use_docker "$@"
     install_deps
     mkdir -p "$BUILD_DIR"
     download_sources
