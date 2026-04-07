@@ -319,9 +319,18 @@ if [ ! -d /lib64 ]; then
     mkdir -p /lib64
 fi
 
-# Ensure the dynamic loader symlink exists
+# Ensure the dynamic loader symlink exists.
+# The real loader path differs by distro:
+#   Ubuntu 22.04+ / merged-usr:  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+#   Ubuntu 20.04 / older:        /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
 if [ ! -e /lib64/ld-linux-x86-64.so.2 ]; then
-    ln -s /usr/lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+    if [ -e /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+        ln -s /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+    elif [ -e /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+        ln -s /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+    else
+        echo "WARNING: could not find ld-linux-x86-64.so.2 — squid may fail to start" >&2
+    fi
 fi
 EOF
     fi
