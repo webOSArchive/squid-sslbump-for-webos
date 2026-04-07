@@ -85,7 +85,7 @@ maybe_use_docker() {
         --env SQUID_BUILD_IN_DOCKER=1 \
         --env DEBIAN_FRONTEND=noninteractive \
         "$DOCKER_IMAGE" \
-        bash build-linux.sh
+        bash build-linux.sh "$@"
     exit $?
 }
 
@@ -186,6 +186,12 @@ build_squid() {
     local openssl_dir="$BUILD_DIR/openssl-$target"
     local cross="${CROSS_PREFIX[$target]}"
     local host="${HOST_TRIPLE[$target]}"
+
+    # Force generic CPU flags for amd64 to avoid AVX/BMI/etc.
+    if [ "$target" = "amd64" ]; then
+        export CFLAGS="-O2 -march=x86-64 -mtune=generic -mno-avx -mno-avx2 -mno-bmi -mno-bmi2 -mno-fma"
+        export CXXFLAGS="$CFLAGS"
+    fi
 
     if [ -f "$install_dir/sbin/squid" ]; then
         echo "Squid/$target already built, skipping."
@@ -302,6 +308,32 @@ package_target() {
     cp "$SCRIPT_DIR/packaging/archive-server.py" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/squid-sslbump.service" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/install-linux.sh" "$stage_dir/install.sh"
+    # On amd64, some minimal systems (e.g. Raspberry Pi OS) lack /lib64 and the
+    # ld-linux-x86-64.so.2 symlink that the Squid binary's ELF interpreter expects.
+    # Append a one-time fixup so the installed binary can actually run.
+    if [ "$target" = "amd64" ]; then
+        cat >> "$stage_dir/install.sh" <<'EOF'
+
+# Ensure /lib64 exists (needed on some minimal systems)
+if [ ! -d /lib64 ]; then
+    mkdir -p /lib64
+fi
+
+# Ensure the dynamic loader symlink exists.
+# The real loader path differs by distro:
+#   Ubuntu 22.04+ / merged-usr:  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+#   Ubuntu 20.04 / older:        /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+if [ ! -e /lib64/ld-linux-x86-64.so.2 ]; then
+    if [ -e /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+        ln -s /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+    elif [ -e /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+        ln -s /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+    else
+        echo "WARNING: could not find ld-linux-x86-64.so.2 — squid may fail to start" >&2
+    fi
+fi
+EOF
+    fi
     cp "$SCRIPT_DIR/packaging/uninstall-linux.sh" "$stage_dir/uninstall.sh"
     chmod +x "$stage_dir/squid-init.sh" "$stage_dir/install.sh" "$stage_dir/uninstall.sh"
 
@@ -315,13 +347,32 @@ package_target() {
 }
 
 main() {
+    # Allow caller to restrict targets: ./build-linux.sh amd64
+    #                                   ./build-linux.sh arm64 armv7
+    if [ $# -gt 0 ]; then
+        local requested=("$@")
+        local filtered=()
+        for t in "${requested[@]}"; do
+            local valid=0
+            for known in "${TARGETS[@]}"; do
+                [ "$t" = "$known" ] && valid=1 && break
+            done
+            if [ "$valid" = "0" ]; then
+                echo "ERROR: Unknown target '$t'. Valid targets: ${TARGETS[*]}" >&2
+                exit 1
+            fi
+            filtered+=("$t")
+        done
+        TARGETS=("${filtered[@]}")
+    fi
+
     echo ""
     echo "squid-sslbump-for-webos — Linux build"
     echo "Squid $SQUID_VERSION + OpenSSL $OPENSSL_VERSION"
     echo "Targets: ${TARGETS[*]}"
     echo ""
 
-    maybe_use_docker
+    maybe_use_docker "$@"
     install_deps
     mkdir -p "$BUILD_DIR"
     download_sources
