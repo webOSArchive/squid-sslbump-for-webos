@@ -187,6 +187,12 @@ build_squid() {
     local cross="${CROSS_PREFIX[$target]}"
     local host="${HOST_TRIPLE[$target]}"
 
+    # Force generic CPU flags for amd64 to avoid AVX/BMI/etc.
+    if [ "$target" = "amd64" ]; then
+        export CFLAGS="-O2 -march=x86-64 -mtune=generic -mno-avx -mno-avx2 -mno-bmi -mno-bmi2 -mno-fma"
+        export CXXFLAGS="$CFLAGS"
+    fi
+
     if [ -f "$install_dir/sbin/squid" ]; then
         echo "Squid/$target already built, skipping."
         return
@@ -302,6 +308,23 @@ package_target() {
     cp "$SCRIPT_DIR/packaging/archive-server.py" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/squid-sslbump.service" "$stage_dir/"
     cp "$SCRIPT_DIR/packaging/install-linux.sh" "$stage_dir/install.sh"
+    # On amd64, some minimal systems (e.g. Raspberry Pi OS) lack /lib64 and the
+    # ld-linux-x86-64.so.2 symlink that the Squid binary's ELF interpreter expects.
+    # Append a one-time fixup so the installed binary can actually run.
+    if [ "$target" = "amd64" ]; then
+        cat >> "$stage_dir/install.sh" <<'EOF'
+
+# Ensure /lib64 exists (needed on some minimal systems)
+if [ ! -d /lib64 ]; then
+    mkdir -p /lib64
+fi
+
+# Ensure the dynamic loader symlink exists
+if [ ! -e /lib64/ld-linux-x86-64.so.2 ]; then
+    ln -s /usr/lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+fi
+EOF
+    fi
     cp "$SCRIPT_DIR/packaging/uninstall-linux.sh" "$stage_dir/uninstall.sh"
     chmod +x "$stage_dir/squid-init.sh" "$stage_dir/install.sh" "$stage_dir/uninstall.sh"
 
